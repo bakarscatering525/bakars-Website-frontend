@@ -426,6 +426,29 @@ const PLAN_TAB_CONFIGS: Record<string, PlanTabTemplate> = {
   },
 };
 
+const buildDefaultPlanIdentity = (
+  tab: MealSubscriptionPlan['tab']
+): Pick<PlanFormState, 'code' | 'name'> => {
+  const config = PLAN_TAB_CONFIGS[tab];
+  if (!config) {
+    return {
+      code: `${tab}_plan`,
+      name: tab,
+    };
+  }
+
+  const normalizedName = config.label.trim();
+  const normalizedCode =
+    tab === 'weekly'
+      ? 'weekly_10_meal'
+      : normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+
+  return {
+    code: normalizedCode.replace(/^_+|_+$/g, ''),
+    name: normalizedName,
+  };
+};
+
 const formatCurrency = (value: number | undefined) =>
   value !== undefined
     ? new Intl.NumberFormat('en-AU', {
@@ -777,9 +800,13 @@ const weeksWindow = useMemo(() => {
       const targetTab = activePlanTab || defaultPlanForm.tab;
       setActivePlanTab(targetTab as MealSubscriptionPlan['tab']);
       const template = PLAN_TAB_CONFIGS[targetTab]?.template ?? {};
+      const defaultIdentity = buildDefaultPlanIdentity(
+        targetTab as MealSubscriptionPlan['tab']
+      );
       const mergedForm: PlanFormState = {
         ...defaultPlanForm,
         ...template,
+        ...defaultIdentity,
         tab: targetTab,
         customer_notifications: {
           upsell_message: template.customer_notifications?.upsell_message ?? '',
@@ -1077,7 +1104,7 @@ const applyTemplateDays = (days?: string[]) => {
     );
     if (dateKeys.length === 0) {
       showToast(
-        'Add Monday and Thursday delivery dates and assign menu items.',
+        'Add Monday and Thursday delivery dates first.',
         'error'
       );
       return;
@@ -1104,13 +1131,6 @@ const applyTemplateDays = (days?: string[]) => {
         .map((id) => (id != null ? String(id) : ''))
         .filter((id) => id.length > 0 && mealPlanItemIdSet.has(id))
         .filter((id) => isValidObjectId(id));
-      if (selections.length === 0) {
-        showToast(
-          `Assign at least one menu item for ${dateKey}.`,
-          'error'
-        );
-        return;
-      }
       dateMapping[dateKey] = Array.from(new Set(selections));
     }
 
@@ -1132,7 +1152,9 @@ const applyTemplateDays = (days?: string[]) => {
       // Keep weekly schedule in sync (used by /menu/weekly endpoint)
       let syncFailures: string[] = [];
       if ((payload.tab || editingPlan?.tab) === 'weekly') {
-        const scheduleEntries = Object.entries(dateMapping);
+        const scheduleEntries = Object.entries(dateMapping).filter(
+          ([, items]) => items.length > 0
+        );
         const syncResults = await Promise.allSettled(
           scheduleEntries.map(([dateKey, items]) =>
             adminAPI.upsertWeeklySchedule(dateKey, items, 1)
@@ -1219,6 +1241,13 @@ const applyTemplateDays = (days?: string[]) => {
                   Edit the {PLAN_TAB_CONFIGS[activePlanTab]?.label || activePlanTab} price and curate menus for each delivery date.
                 </p>
               </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => handleOpenPlanModal()}
+              >
+                Create {PLAN_TAB_CONFIGS[activePlanTab]?.label || 'Meal Plan'}
+              </Button>
             </div>
 
             <div className="overflow-x-auto">
@@ -1244,9 +1273,20 @@ const applyTemplateDays = (days?: string[]) => {
                     <tr>
                       <td
                         colSpan={4}
-                        className="px-4 py-6 text-center text-gray-500 italic"
+                        className="px-4 py-8 text-center text-gray-500"
                       >
-                        No weekly meal plan configured yet.
+                        <div className="flex flex-col items-center gap-3">
+                          <p className="italic">
+                            No {activePlanTab} meal plan configured yet.
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenPlanModal()}
+                          >
+                            Create {PLAN_TAB_CONFIGS[activePlanTab]?.label || 'Meal Plan'}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   )}

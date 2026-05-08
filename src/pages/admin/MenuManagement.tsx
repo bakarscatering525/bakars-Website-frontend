@@ -47,6 +47,7 @@ const MenuManagement: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const debouncedSearch = useDebounce(searchQuery, 400);
+  const hasLoadedInitialCategories = React.useRef(false);
 
   useEffect(() => {
     if (!error) return;
@@ -117,15 +118,14 @@ const MenuManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    const initCategories = async () => {
-      try {
-        await fetchManagedCategories();
-      } catch (err) {
-        handleMenuError(err);
-      }
-    };
+    if (hasLoadedInitialCategories.current) {
+      return;
+    }
+    hasLoadedInitialCategories.current = true;
 
-    initCategories();
+    fetchManagedCategories().catch((err) => {
+      handleMenuError(err);
+    });
   }, [fetchManagedCategories, handleMenuError]);
 
   useEffect(() => {

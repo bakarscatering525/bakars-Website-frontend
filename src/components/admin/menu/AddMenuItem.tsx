@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAdminStore } from '@store/adminStore';
 import { useToast } from '@components/common/Toast';
 import Input from '@components/common/Input';
@@ -25,10 +25,10 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
   const {
     createMenuItem,
     managedCategories,
-    fetchManagedCategories,
     isUpdating,
   } = useAdminStore();
   const { showToast } = useToast();
+  const hasShownMissingCategoryWarning = useRef(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -75,10 +75,15 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
   ];
 
   useEffect(() => {
-    if (managedCategories.length === 0) {
-      fetchManagedCategories();
+    if (managedCategories.length > 0 || hasShownMissingCategoryWarning.current) {
+      return;
     }
-  }, []);
+    hasShownMissingCategoryWarning.current = true;
+    showToast(
+      'Add a category first from the Categories page before creating a menu item.',
+      'warning'
+    );
+  }, [managedCategories.length, showToast]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -101,6 +106,14 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
     e.preventDefault();
 
     // Validation
+    if (managedCategories.length === 0) {
+      showToast(
+        'Add a category first from the Categories page before creating a menu item.',
+        'error'
+      );
+      return;
+    }
+
     if (!formData.name || !formData.category || !formData.price) {
       showToast('Please fill in all required fields', 'error');
       return;
@@ -218,6 +231,13 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
         <label className="block text-sm font-medium text-text mb-2">
           Category <span className="text-red-500">*</span>
         </label>
+        {managedCategories.length === 0 && (
+          <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            No categories found. Please add a category first from the
+            <span className="font-semibold"> Categories </span>
+            page.
+          </div>
+        )}
         <select
           value={formData.category}
           onChange={(e) =>
@@ -225,23 +245,14 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
           }
           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
           required
+          disabled={managedCategories.length === 0}
         >
           <option value="">Select category</option>
-          <option value="rice">Rice Dishes</option>
-          <option value="curry">Curry</option>
-          <option value="bbq">BBQ</option>
-          <option value="sweets">Sweets</option>
-          <option value="drinks">Drinks</option>
-          {managedCategories
-            .filter(
-              (cat) =>
-                !['rice', 'curry', 'bbq', 'sweets', 'drinks'].includes(cat.name)
-            )
-            .map((cat) => (
-              <option key={cat.name} value={cat.name}>
-                {cat.display_name || cat.name}
-              </option>
-            ))}
+          {managedCategories.map((cat) => (
+            <option key={cat._id || cat.name} value={cat.name}>
+              {cat.display_name || cat.name}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -442,7 +453,7 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
           variant="primary"
           className="flex-1"
           isLoading={isUpdating}
-          disabled={isUpdating}
+          disabled={isUpdating || managedCategories.length === 0}
         >
           Create Menu Item
         </Button>
