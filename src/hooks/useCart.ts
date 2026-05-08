@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useCartStore } from '@store/cartStore';
 import { useAuthStore } from '@store/authStore';
 import { useToast } from '@components/common/Toast';
-import { MenuItem } from '@models/menu.types';
+import { MenuItem, MenuItemVariation } from '@models/menu.types';
 
 export const useCart = () => {
   const cartStore = useCartStore();
@@ -19,16 +19,21 @@ export const useCart = () => {
   /**
    * Add menu item to cart
    */
-  const addToCart = async (menuItem: MenuItem, quantity: number = 1, specialInstructions?: string) => {
+  const addToCart = async (
+    menuItem: MenuItem,
+    quantity: number = 1,
+    specialInstructions?: string,
+    variation?: MenuItemVariation
+  ) => {
     if (!isAuthenticated) {
       // For unauthenticated users, use local cart
-      cartStore.addLocalItem(menuItem, quantity, specialInstructions);
+      cartStore.addLocalItem(menuItem, quantity, specialInstructions, variation);
       showToast(`${menuItem.name} added to cart!`, 'success');
       return;
     }
 
     try {
-      await cartStore.addItem(menuItem, quantity, specialInstructions);
+      await cartStore.addItem(menuItem, quantity, specialInstructions, variation);
       showToast(`${menuItem.name} added to cart!`, 'success');
     } catch (error) {
       showToast('Failed to add item to cart', 'error');
@@ -40,7 +45,7 @@ export const useCart = () => {
   /**
    * Remove item from cart
    */
-  const removeFromCart = async (itemId: string) => {
+  const removeFromCart = async (itemId: string, variationSize?: string) => {
     if (!isAuthenticated) {
       cartStore.removeLocalItem(itemId);
       showToast('Item removed from cart', 'info');
@@ -48,7 +53,7 @@ export const useCart = () => {
     }
 
     try {
-      await cartStore.removeItem(itemId);
+      await cartStore.removeItem(itemId, variationSize);
       showToast('Item removed from cart', 'info');
     } catch (error) {
       showToast('Failed to remove item', 'error');
@@ -58,7 +63,7 @@ export const useCart = () => {
   /**
    * Update cart item quantity
    */
-  const updateCartQuantity = async (itemId: string, quantity: number) => {
+  const updateCartQuantity = async (itemId: string, quantity: number, variationSize?: string) => {
     if (!isAuthenticated) {
       cartStore.updateLocalQuantity(itemId, quantity);
       if (quantity === 0) {
@@ -68,7 +73,7 @@ export const useCart = () => {
     }
 
     try {
-      await cartStore.updateQuantity(itemId, quantity);
+      await cartStore.updateQuantity(itemId, quantity, variationSize);
       if (quantity === 0) {
         showToast('Item removed from cart', 'info');
       }

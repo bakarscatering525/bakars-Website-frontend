@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { cartAPI, CartSummary } from '@api/endpoints/cart';
-import { MenuItem } from '@models/menu.types';
+import { MenuItem, MenuItemVariation } from '@models/menu.types';
 import { DAILY_DELIVERY_FEE } from '@utils/constants';
 
 // Define the structure for cart items stored locally
@@ -8,6 +8,7 @@ interface LocalCartItem {
   menu_item: MenuItem;
   quantity: number;
   special_instructions?: string;
+  variation?: MenuItemVariation;
 }
 
 
@@ -30,9 +31,9 @@ interface CartStore {
   
   // Actions
   fetchCart: () => Promise<void>;
-  addItem: (item: MenuItem, quantity: number, specialInstructions?: string) => Promise<void>;
-  updateQuantity: (itemId: string, quantity: number) => Promise<void>;
-  removeItem: (itemId: string) => Promise<void>;
+  addItem: (item: MenuItem, quantity: number, specialInstructions?: string, variation?: MenuItemVariation) => Promise<void>;
+  updateQuantity: (itemId: string, quantity: number, variationSize?: string) => Promise<void>;
+  removeItem: (itemId: string, variationSize?: string) => Promise<void>;
   clearCart: () => Promise<void>;
   
   // Local state setters
@@ -41,7 +42,7 @@ interface CartStore {
   clearError: () => void;
 
   // Local cart operations (for unauthenticated users)
-  addLocalItem: (item: MenuItem, quantity: number, specialInstructions?: string) => void;
+  addLocalItem: (item: MenuItem, quantity: number, specialInstructions?: string, variation?: MenuItemVariation) => void;
   removeLocalItem: (itemId: string) => void;
   updateLocalQuantity: (itemId: string, quantity: number) => void;
   clearLocalCart: () => void;
@@ -87,12 +88,11 @@ export const useCartStore = create<CartStore>((set, get) => ({
   /**
    * Add menu item to cart - FIXED to use item.id
    */
-  addItem: async (item: MenuItem, quantity: number, specialInstructions?: string) => {
+  addItem: async (item: MenuItem, quantity: number, specialInstructions?: string, variation?: MenuItemVariation) => {
     set({ isUpdating: true, error: null });
     
     // Validate item has an ID
     if (!item.id) {
-      console.error('❌ Item missing ID:', item);
       set({
         error: 'Invalid item: missing ID',
         isUpdating: false,
@@ -101,21 +101,19 @@ export const useCartStore = create<CartStore>((set, get) => ({
     }
 
     try {
-      console.log('🛒 Adding item to cart:', { itemId: item.id, quantity });
-      const response = await cartAPI.addToCart(item.id, quantity, false);
-      console.log('✅ Item added successfully:', response.data);
+      const variationSize = variation?.size;
+      const response = await cartAPI.addToCart(item.id, quantity, variationSize);
       
       set({
         cartSummary: response.data.data,
         isUpdating: false,
       });
     } catch (error: any) {
-      console.error('❌ Failed to add item:', error);
-      console.error('Error response:', error.response?.data);
+      console.error('Failed to add item:', error);
       
       // If not authenticated, add to local cart
       if (error.response?.status === 401) {
-        get().addLocalItem(item, quantity, specialInstructions);
+        get().addLocalItem(item, quantity, specialInstructions, variation);
         set({ isUpdating: false });
       } else {
         set({
@@ -132,15 +130,15 @@ export const useCartStore = create<CartStore>((set, get) => ({
   /**
    * Update item quantity in cart
    */
-  updateQuantity: async (itemId: string, quantity: number) => {
+  updateQuantity: async (itemId: string, quantity: number, variationSize?: string) => {
     if (quantity <= 0) {
-      await get().removeItem(itemId);
+      await get().removeItem(itemId, variationSize);
       return;
     }
 
     set({ isUpdating: true, error: null });
     try {
-      const response = await cartAPI.updateCartItem(itemId, quantity);
+      const response = await cartAPI.updateCartItem(itemId, quantity, variationSize);
       set({
         cartSummary: response.data.data,
         isUpdating: false,
@@ -164,10 +162,10 @@ export const useCartStore = create<CartStore>((set, get) => ({
   /**
    * Remove item from cart
    */
-  removeItem: async (itemId: string) => {
+  removeItem: async (itemId: string, variationSize?: string) => {
     set({ isUpdating: true, error: null });
     try {
-      const response = await cartAPI.removeFromCart(itemId);
+      const response = await cartAPI.removeFromCart(itemId, variationSize);
       set({
         cartSummary: response.data.data,
         isUpdating: false,
@@ -218,21 +216,26 @@ export const useCartStore = create<CartStore>((set, get) => ({
   /**
    * Local cart operations (for unauthenticated users)
    */
-  addLocalItem: (item: MenuItem, quantity: number, specialInstructions?: string) => {
+  addLocalItem: (item: MenuItem, quantity: number, specialInstructions?: string, variation?: MenuItemVariation) => {
     const currentItems = get().localItems;
-    const existingItem = currentItems.find(i => i.menu_item.id === item.id);
-    
+    const existingItem = currentItems.find(
+      (i) =>
+        i.menu_item.id === item.id &&
+        (i.variation?.size || undefined) === (variation?.size || undefined)
+    );
+
     if (existingItem) {
       set({
-        localItems: currentItems.map(i =>
-          i.menu_item.id === item.id
+        localItems: currentItems.map((i) =>
+          i.menu_item.id === item.id &&
+          (i.variation?.size || undefined) === (variation?.size || undefined)
             ? { ...i, quantity: i.quantity + quantity }
             : i
         ),
       });
     } else {
       set({
-        localItems: [...currentItems, { menu_item: item, quantity, special_instructions: specialInstructions }],
+        localItems: [...currentItems, { menu_item: item, quantity, special_instructions: specialInstructions, variation }],
       });
     }
   },
@@ -262,20 +265,24 @@ export const useCartStore = create<CartStore>((set, get) => ({
   getLocalSummary: () => {
     const items = get().localItems;
     const deliveryOption = get().deliveryOption;
-    const subtotal = items.reduce((sum, item) => sum + (item.menu_item.price * item.quantity), 0);
+    const subtotal = items.reduce(
+      (sum, item) => sum + ((item.variation?.price ?? item.menu_item.price) * item.quantity),
+      0
+    );
     
     const delivery_fee = deliveryOption === 'pickup' ? 0 : DAILY_DELIVERY_FEE;
     const total = subtotal + delivery_fee;
     const items_count = items.reduce((sum, item) => sum + item.quantity, 0);
     
     return {
-      items: items.map(i => ({
+      items: items.map((i) => ({
         item_id: i.menu_item.id,
         item_name: i.menu_item.name,
         category: i.menu_item.category,
         quantity: i.quantity,
-        price: i.menu_item.price,
-        subtotal: i.menu_item.price * i.quantity,
+        price: i.variation?.price ?? i.menu_item.price,
+        subtotal: (i.variation?.price ?? i.menu_item.price) * i.quantity,
+        variation_size: i.variation?.size,
       })),
       sidelines: [],
       subtotal,

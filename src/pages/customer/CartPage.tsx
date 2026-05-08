@@ -159,7 +159,7 @@ const CartPage: React.FC = () => {
   }, [items, itemImageMap]);
 
   useEffect(() => {
-    const currentItemIds = new Set(items.map((item: any) => item.item_id));
+    const currentItemIds = new Set(items.map((item: any) => `${item.item_id}-${item.variation_size || ''}`));
 
     setSelectedItems((prevSelected) => {
       if (selectAll) {
@@ -189,19 +189,20 @@ const CartPage: React.FC = () => {
       setSelectAll(false);
     } else {
       const allItemIds = new Set([
-        ...items.map((item: any) => item.item_id),
+        ...items.map((item: any) => `${item.item_id}-${item.variation_size || ''}`),
       ]);
       setSelectedItems(allItemIds);
       setSelectAll(true);
     }
   };
 
-  const handleSelectItem = (itemId: string) => {
+  const handleSelectItem = (itemId: string, variationSize?: string) => {
+    const compositeId = `${itemId}-${variationSize || ''}`;
     const newSelected = new Set(selectedItems);
-    if (newSelected.has(itemId)) {
-      newSelected.delete(itemId);
+    if (newSelected.has(compositeId)) {
+      newSelected.delete(compositeId);
     } else {
-      newSelected.add(itemId);
+      newSelected.add(compositeId);
     }
     setSelectedItems(newSelected);
 
@@ -227,8 +228,10 @@ const CartPage: React.FC = () => {
       return;
     }
 
-    for (const itemId of selectedItems) {
-      await removeFromCart(itemId);
+    for (const compositeId of selectedItems) {
+      const [itemId, variationSize] = compositeId.split('-', 2);
+      const variation = variationSize === '' ? undefined : variationSize;
+      await removeFromCart(itemId, variation);
     }
 
     setSelectedItems(new Set());
@@ -236,13 +239,13 @@ const CartPage: React.FC = () => {
     showToast('Selected items removed', 'success');
   };
 
-  const handleQuantityChange = async (itemId: string, newQuantity: number) => {
+  const handleQuantityChange = async (itemId: string, newQuantity: number, variationSize?: string) => {
     if (newQuantity === 0) {
       if (window.confirm('Remove this item from cart?')) {
-        await removeFromCart(itemId);
+        await removeFromCart(itemId, variationSize);
       }
     } else {
-      await updateCartQuantity(itemId, newQuantity);
+      await updateCartQuantity(itemId, newQuantity, variationSize);
     }
   };
 
@@ -352,7 +355,7 @@ const CartPage: React.FC = () => {
                       <input
                         type="checkbox"
                         checked={selectedItems.has(item.item_id)}
-                        onChange={() => handleSelectItem(item.item_id)}
+                        onChange={() => handleSelectItem(item.item_id, item.variation_size)}
                         className="mt-8 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                       />
 
@@ -382,6 +385,11 @@ const CartPage: React.FC = () => {
                             <p className="text-sm text-gray-500 mb-2">
                               {item.category}
                             </p>
+                            {item.variation_size && (
+                              <p className="text-xs text-gray-500 mb-2">
+                                Size: {item.variation_size.charAt(0).toUpperCase() + item.variation_size.slice(1)}
+                              </p>
+                            )}
 
                             {/* Special instructions if any */}
                             {item.special_instructions && (
@@ -407,7 +415,7 @@ const CartPage: React.FC = () => {
                           {/* Actions */}
                           <div className="flex flex-col items-end space-y-2">
                             <button
-                              onClick={() => removeFromCart(item.item_id)}
+                              onClick={() => removeFromCart(item.item_id, item.variation_size)}
                               className="text-gray-400 hover:text-red-500 transition-colors"
                             >
                               <Trash2 size={18} />
@@ -419,7 +427,8 @@ const CartPage: React.FC = () => {
                                 onClick={() =>
                                   handleQuantityChange(
                                     item.item_id,
-                                    item.quantity - 1
+                                    item.quantity - 1,
+                                    item.variation_size
                                   )
                                 }
                                 className="w-8 h-8 flex items-center justify-center hover:bg-white rounded transition-colors"
@@ -434,7 +443,8 @@ const CartPage: React.FC = () => {
                                 onClick={() =>
                                   handleQuantityChange(
                                     item.item_id,
-                                    item.quantity + 1
+                                    item.quantity + 1,
+                                    item.variation_size
                                   )
                                 }
                                 className="w-8 h-8 flex items-center justify-center hover:bg-white rounded transition-colors"

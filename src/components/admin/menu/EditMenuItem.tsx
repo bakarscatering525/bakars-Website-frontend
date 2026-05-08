@@ -14,6 +14,12 @@ interface EditMenuItemProps {
 
 type AvailabilityScope = 'daily' | 'meal_plan' | 'both';
 
+interface MenuItemVariation {
+  size: 'small' | 'medium' | 'large';
+  price: number;
+  is_available: boolean;
+}
+
 export const EditMenuItem: React.FC<EditMenuItemProps> = ({
   item,
   onSuccess,
@@ -37,6 +43,22 @@ export const EditMenuItem: React.FC<EditMenuItemProps> = ({
     spice_level: item.spice_level || '',
     is_vegetarian: item.is_vegetarian || false,
     is_halal: item.is_halal !== false,
+  });
+
+  const [variations, setVariations] = useState<MenuItemVariation[]>(() => {
+    // Initialize with existing variations or defaults
+    const existingVariations = item.variations || [];
+    const defaultVariations: MenuItemVariation[] = [
+      { size: 'small', price: 0, is_available: true },
+      { size: 'medium', price: 0, is_available: true },
+      { size: 'large', price: 0, is_available: true },
+    ];
+
+    // Merge existing variations with defaults
+    return defaultVariations.map(defaultVar => {
+      const existing = existingVariations.find(v => v.size === defaultVar.size);
+      return existing ? { ...existing } : { ...defaultVar };
+    });
   });
   const resolveInitialScope = (): AvailabilityScope => {
     if (item.is_available_for_daily && item.is_available_for_meal_plan) {
@@ -151,6 +173,14 @@ export const EditMenuItem: React.FC<EditMenuItemProps> = ({
         );
       }
 
+      // Check if variations have changed
+      const availableVariations = variations.filter(v => v.is_available);
+      const existingVariations = item.variations || [];
+      const variationsChanged = JSON.stringify(availableVariations) !== JSON.stringify(existingVariations);
+      if (variationsChanged) {
+        formDataToSend.append('variations', JSON.stringify(availableVariations));
+      }
+
       // Append image if changed
       if (imageFile) {
         formDataToSend.append('image', imageFile);
@@ -161,7 +191,6 @@ export const EditMenuItem: React.FC<EditMenuItemProps> = ({
       const menuItemId = item._id || item.id;
       if (!menuItemId) {
         showToast('Unable to determine menu item ID.', 'error');
-        setIsSubmitting(false);
         return;
       }
 
@@ -248,12 +277,73 @@ export const EditMenuItem: React.FC<EditMenuItemProps> = ({
       <Input
         type="number"
         step="0.01"
-        label="Price (AUD)"
+        label="Base Price (AUD)"
         value={formData.price}
         onChange={(e) => setFormData({ ...formData, price: e.target.value })}
         placeholder="15.99"
         required
       />
+
+      {/* Variations */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <label className="block text-sm font-medium text-text">
+            Size Variations
+          </label>
+          <span className="text-xs text-gray-500">
+            Configure different sizes with custom pricing
+          </span>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          {variations.map((variation, index) => (
+            <div key={variation.size} className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-text capitalize">
+                  {variation.size}
+                </h4>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={variation.is_available}
+                    onChange={(e) => {
+                      const newVariations = [...variations];
+                      newVariations[index].is_available = e.target.checked;
+                      setVariations(newVariations);
+                    }}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-xs text-gray-600">Available</span>
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs text-gray-600">Price (AUD)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={variation.price || ''}
+                  onChange={(e) => {
+                    const newVariations = [...variations];
+                    newVariations[index].price = parseFloat(e.target.value) || 0;
+                    setVariations(newVariations);
+                  }}
+                  disabled={!variation.is_available}
+                  className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent ${
+                    !variation.is_available ? 'bg-gray-100 cursor-not-allowed' : ''
+                  }`}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-xs text-gray-500">
+          Leave variation prices at 0.00 to use the base price. Only available variations will be shown to customers.
+        </p>
+      </div>
 
       {/* Description */}
       <div>

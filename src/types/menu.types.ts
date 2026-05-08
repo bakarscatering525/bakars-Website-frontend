@@ -1,3 +1,9 @@
+export interface MenuItemVariation {
+  size: 'small' | 'medium' | 'large';
+  price: number;
+  is_available: boolean;
+}
+
 export interface MenuItem {
   _id: string;  // MongoDB ID
   id: string;   // Also support 'id' field for compatibility
@@ -5,6 +11,7 @@ export interface MenuItem {
   description: string;
   category: string;
   price: number;
+  variations?: MenuItemVariation[];  // Optional variations (small, medium, large)
   image_url?: string;  // ✅ This can be null/undefined
   availability_scope?: 'daily' | 'meal_plan' | 'both';
   is_available: boolean;

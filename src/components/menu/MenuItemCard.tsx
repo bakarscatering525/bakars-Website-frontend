@@ -28,6 +28,10 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
   const [quantity, setQuantity] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedVariationSize, setSelectedVariationSize] = useState<string | undefined>(() => {
+    const initialVariation = item.variations?.find((v) => v.is_available);
+    return initialVariation?.size;
+  });
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
@@ -36,6 +40,18 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
   const { openModal, setPendingCartAction } = useAuthModalStore();
   const { showToast } = useToast();
   const categoryMap = useMenuStore((state) => state.categoryMap);
+
+  const availableVariations =
+    item.variations?.filter((variation) => variation.is_available) || [];
+  const selectedVariation =
+    availableVariations.find((variation) => variation.size === selectedVariationSize) ||
+    availableVariations[0];
+  const selectedPrice = selectedVariation?.price ?? item.price;
+
+  React.useEffect(() => {
+    const defaultVariation = item.variations?.find((v) => v.is_available);
+    setSelectedVariationSize(defaultVariation?.size);
+  }, [item.variations]);
 
   const handleAddToCart = async () => {
     if (isActionDisabled) {
@@ -56,6 +72,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
         item: item,
         quantity: quantity,
         specialInstructions: specialInstructions,
+        variation: selectedVariation,
         timestamp: new Date().toISOString(),
       });
 
@@ -67,7 +84,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
 
     if (quantity > 0) {
       try {
-        await addToCart(item, quantity, specialInstructions);
+        await addToCart(item, quantity, specialInstructions, selectedVariation);
         // Reset form and close modal
         setQuantity(1);
         setSpecialInstructions('');
@@ -92,6 +109,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
         item: item,
         quantity: 1,
         specialInstructions: '',
+        variation: selectedVariation,
         timestamp: new Date().toISOString(),
       });
 
@@ -219,18 +237,47 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
             </div>
           )}
 
+          {/* Variations Display */}
+          {availableVariations.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-gray-600 mb-2">Available Sizes:</p>
+              <div className="flex gap-2 flex-wrap">
+                {availableVariations.map((variation) => (
+                  <button
+                    key={variation.size}
+                    onClick={() => setSelectedVariationSize(variation.size)}
+                    className={`flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200 border ${
+                      selectedVariationSize === variation.size
+                        ? 'bg-primary text-white border-primary shadow-md scale-105'
+                        : 'bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200 text-primary hover:border-primary-400 hover:shadow-sm'
+                    }`}
+                  >
+                    <span className="text-xs font-bold uppercase tracking-wide">
+                      {variation.size.charAt(0).toUpperCase() + variation.size.slice(1)}
+                    </span>
+                    <span className="text-sm font-bold">
+                      {formatCurrency(variation.price)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Price and action */}
           <div className="mt-auto pt-4">
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
-              <div className="flex items-end gap-1 sm:gap-2 whitespace-nowrap">
-                <span className="font-heading text-xl sm:text-2xl font-bold text-primary leading-none">
-                  {formatCurrency(item.price)}
-                </span>
-                {item.serving_size && (
-                  <span className="text-xs sm:text-sm text-gray-500 leading-none">
-                    / {item.serving_size}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-end gap-1 sm:gap-2 whitespace-nowrap">
+                  <span className="font-heading text-xl sm:text-2xl font-bold text-primary leading-none">
+                    {formatCurrency(selectedPrice)}
                   </span>
-                )}
+                  {item.serving_size && (
+                    <span className="text-xs sm:text-sm text-gray-500 leading-none">
+                      / {item.serving_size}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {showQuickAdd && item.is_available && (
@@ -297,6 +344,25 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
                 <span>Contains: {item.allergens.join(', ')}</span>
               </div>
             )}
+
+            {availableVariations.length > 0 && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-text mb-2">
+                  Choose a size
+                </label>
+                <select
+                  value={selectedVariationSize}
+                  onChange={(e) => setSelectedVariationSize(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  {availableVariations.map((variation) => (
+                    <option key={variation.size} value={variation.size}>
+                      {variation.size.charAt(0).toUpperCase() + variation.size.slice(1)} – {formatCurrency(variation.price)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Quantity Selector */}
@@ -342,13 +408,13 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Price per item:</span>
               <span className="font-semibold">
-                {formatCurrency(item.price)}
+                {formatCurrency(selectedPrice)}
               </span>
             </div>
             <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
               <span className="font-semibold text-lg">Total:</span>
               <span className="font-heading text-2xl font-bold text-primary">
-                {formatCurrency(item.price * quantity)}
+                {formatCurrency(selectedPrice * quantity)}
               </span>
             </div>
           </div>
@@ -381,7 +447,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
               ) : (
                 <>
                   <ShoppingCart size={20} className="mr-2" />
-                  Add to Cart - {formatCurrency(item.price * quantity)}
+                  Add to Cart - {formatCurrency(selectedPrice * quantity)}
                 </>
               )}
             </Button>

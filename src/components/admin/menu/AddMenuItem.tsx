@@ -5,6 +5,12 @@ import Input from '@components/common/Input';
 import Button from '@components/common/Button';
 import { Upload, X } from 'lucide-react';
 
+interface MenuItemVariation {
+  size: 'small' | 'medium' | 'large';
+  price: number;
+  is_available: boolean;
+}
+
 interface AddMenuItemProps {
   onSuccess: () => void;
   onCancel: () => void;
@@ -34,6 +40,13 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
     is_vegetarian: false,
     is_halal: true,
   });
+
+  const [variations, setVariations] = useState<MenuItemVariation[]>([
+    { size: 'small', price: 0, is_available: true },
+    { size: 'medium', price: 0, is_available: true },
+    { size: 'large', price: 0, is_available: true },
+  ]);
+
   const [availabilityScope, setAvailabilityScope] =
     useState<AvailabilityScope>('daily');
 
@@ -93,6 +106,13 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
       return;
     }
 
+    // Validate variations - at least one variation should be available
+    const availableVariations = variations.filter(v => v.is_available);
+    if (availableVariations.length === 0) {
+      showToast('At least one variation must be available', 'error');
+      return;
+    }
+
     try {
       const formDataToSend = new FormData();
 
@@ -112,6 +132,9 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
         String(isMealPlanMenu)
       );
       formDataToSend.append('availability_scope', availabilityScope);
+
+      // Append variations
+      formDataToSend.append('variations', JSON.stringify(availableVariations));
 
       if (formData.allergens) {
         formDataToSend.append('allergens', formData.allergens);
@@ -226,13 +249,74 @@ export const AddMenuItem: React.FC<AddMenuItemProps> = ({
       <Input
         type="number"
         step="0.01"
-        label="Price (AUD)"
+        label="Base Price (AUD)"
         value={formData.price}
         onChange={(e) => setFormData({ ...formData, price: e.target.value })}
         placeholder="15.99"
         required
         min="0"
       />
+
+      {/* Variations */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <label className="block text-sm font-medium text-text">
+            Size Variations (Optional)
+          </label>
+          <span className="text-xs text-gray-500">
+            Configure different sizes with custom pricing
+          </span>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          {variations.map((variation, index) => (
+            <div key={variation.size} className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-text capitalize">
+                  {variation.size}
+                </h4>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={variation.is_available}
+                    onChange={(e) => {
+                      const newVariations = [...variations];
+                      newVariations[index].is_available = e.target.checked;
+                      setVariations(newVariations);
+                    }}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-xs text-gray-600">Available</span>
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs text-gray-600">Price (AUD)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={variation.price || ''}
+                  onChange={(e) => {
+                    const newVariations = [...variations];
+                    newVariations[index].price = parseFloat(e.target.value) || 0;
+                    setVariations(newVariations);
+                  }}
+                  disabled={!variation.is_available}
+                  className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent ${
+                    !variation.is_available ? 'bg-gray-100 cursor-not-allowed' : ''
+                  }`}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-xs text-gray-500">
+          Leave variation prices at 0.00 to use the base price. Only available variations will be shown to customers.
+        </p>
+      </div>
 
       {/* Description */}
       <div>

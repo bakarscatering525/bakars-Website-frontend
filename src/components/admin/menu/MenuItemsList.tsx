@@ -150,6 +150,18 @@ export const MenuItemsList: React.FC<MenuItemsListProps> = ({
                 {item.description}
               </p>
 
+              {item.variations && item.variations.length > 0 && (
+                <div className="mb-3 text-xs text-gray-600">
+                  <span className="font-semibold">Variations:</span>{' '}
+                  {item.variations
+                    .filter((variation) => variation.is_available)
+                    .map((variation) =>
+                      `${variation.size.charAt(0).toUpperCase() + variation.size.slice(1)} ${formatCurrency(variation.price)}`
+                    )
+                    .join(' • ')}
+                </div>
+              )}
+
               {/* Availability Info */}
               <div className="space-y-2 mb-4 text-xs text-gray-600">
                 <div className="flex items-center space-x-2">

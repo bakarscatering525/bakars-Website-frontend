@@ -8,6 +8,7 @@ export interface CartItem {
   quantity: number;
   price: number;
   subtotal: number;
+  variation_size?: string;
 }
 
 export interface CartSideline {
@@ -37,28 +38,32 @@ export const cartAPI = {
   /**
    * Add item to cart - FIXED to match backend API
    */
-  addToCart: (item_id: string, quantity: number, is_sideline: boolean = false) => {
-    console.log('📤 Sending to /cart/add-item:', { item_id, quantity, is_sideline });
+  addToCart: (
+    item_id: string,
+    quantity: number,
+    variation_size?: string
+  ) => {
     return apiClient.post<ApiResponse<CartSummary>>('/cart/add-item', {
       item_id,
       quantity,
-      is_sideline,
+      variation_size,
     });
   },
 
   /**
    * Update cart item quantity
    */
-  updateCartItem: (item_id: string, quantity: number, is_sideline: boolean = false) => 
-    apiClient.put<ApiResponse<CartSummary>>(`/cart/update-item/${item_id}?is_sideline=${is_sideline}`, { 
-      quantity 
+  updateCartItem: (item_id: string, quantity: number, variation_size?: string) => 
+    apiClient.put<ApiResponse<CartSummary>>(`/cart/update-item/${item_id}`, { 
+      quantity,
+      variation_size,
     }),
 
   /**
    * Remove item from cart
    */
-  removeFromCart: (item_id: string, is_sideline: boolean = false) => 
-    apiClient.delete<ApiResponse<CartSummary>>(`/cart/remove-item/${item_id}?is_sideline=${is_sideline}`),
+  removeFromCart: (item_id: string, variation_size?: string) => 
+    apiClient.delete<ApiResponse<CartSummary>>(`/cart/remove-item/${item_id}${variation_size ? `?variation_size=${variation_size}` : ''}`),
 
   /**
    * Clear cart
