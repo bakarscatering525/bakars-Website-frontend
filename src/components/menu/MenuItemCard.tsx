@@ -239,25 +239,42 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({
 
           {/* Variations Display */}
           {availableVariations.length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs font-semibold text-gray-600 mb-2">Available Sizes:</p>
-              <div className="flex gap-2 flex-wrap">
+            <div className="mb-3 w-full">
+              <p className="text-xs font-semibold text-gray-600 mb-2">Size:</p>
+              
+              {/* Mobile Dropdown */}
+              <div className="sm:hidden">
+                <select
+                  value={selectedVariationSize}
+                  onChange={(e) => setSelectedVariationSize(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm font-semibold text-primary bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {availableVariations.map((variation) => (
+                    <option key={variation.size} value={variation.size}>
+                      {variation.size.charAt(0).toUpperCase() + variation.size.slice(1)} - {formatCurrency(variation.price)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Desktop Chips */}
+              <div className="hidden sm:flex gap-1 w-full">
                 {availableVariations.map((variation) => (
                   <button
                     key={variation.size}
                     onClick={() => setSelectedVariationSize(variation.size)}
-                    className={`flex flex-col items-center px-3 py-2 rounded-lg transition-all duration-200 border ${
+                    className={`flex-1 px-2 py-1.5 rounded text-center transition-all duration-200 border text-xs font-bold uppercase tracking-wide ${
                       selectedVariationSize === variation.size
-                        ? 'bg-primary text-white border-primary shadow-md scale-105'
-                        : 'bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200 text-primary hover:border-primary-400 hover:shadow-sm'
+                        ? 'bg-primary text-white border-primary shadow-md'
+                        : 'bg-primary-50 border-primary-200 text-primary hover:border-primary-400'
                     }`}
                   >
-                    <span className="text-xs font-bold uppercase tracking-wide">
+                    <div className="leading-tight">
                       {variation.size.charAt(0).toUpperCase() + variation.size.slice(1)}
-                    </span>
-                    <span className="text-sm font-bold">
+                    </div>
+                    <div className="text-xs leading-tight">
                       {formatCurrency(variation.price)}
-                    </span>
+                    </div>
                   </button>
                 ))}
               </div>
