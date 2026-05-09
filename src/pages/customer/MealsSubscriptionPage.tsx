@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   useCallback,
   useEffect,
   useMemo,
@@ -51,11 +51,13 @@ interface DeliveryOption {
 interface ScheduledItem {
   item: MenuItem;
   quantity: number;
+  variation_size?: string;
   instructions?: string;
 }
 
 type SelectedMealEntry = {
   quantity: number;
+  variationSize?: string;
   instructions?: string;
 };
 
@@ -66,6 +68,7 @@ interface MealModalState {
   date: string | null;
   item: MenuItem | null;
   quantity: number;
+  variationSize?: string;
   instructions: string;
 }
 
@@ -110,7 +113,6 @@ const DEFAULT_DELIVERY_DAYS = ['monday', 'thursday'];
 const PLAN_TAB_ORDER: MealSubscriptionPlan['tab'][] = [
   'weekly',
   'fortnight',
-  'monthly',
   'regular',
   'custom',
 ];
@@ -203,8 +205,8 @@ const isDiscountCappedPlan = (
 const requiresIncludedBoxMinimum = (
   plan?: MealSubscriptionPlan | null
 ): boolean => {
-  if (!plan) return false;
-  return INCLUDED_MIN_PLAN_TABS.includes(plan.tab);
+  void plan;
+  return false;
 };
 
 const getMenuItemIdentifier = (
@@ -853,10 +855,10 @@ const MealsSubscriptionPage: React.FC = () => {
     date: null,
     item: null,
     quantity: 1,
+    variationSize: undefined,
     instructions: '',
   });
   const weeklyMenuCacheRef = useRef<Record<string, WeeklyMenuCacheEntry>>({});
-  const discountCapToastRef = useRef<Record<string, number>>({});
   const isDateLocked = useCallback(
     (date: string | null | undefined) => {
       if (!date) return false;
@@ -1363,7 +1365,11 @@ const fetchMenuForDate = useCallback(
       Object.entries(slot.menu_items || {}).forEach(([menuId, qty]) => {
         const quantity = Number(qty) || 0;
         if (quantity > 0) {
-          normalized[menuId] = { quantity };
+          const variationSize = (slot as any)?.variation_sizes?.[menuId];
+          normalized[menuId] = {
+            quantity,
+            variationSize: variationSize || undefined,
+          };
         }
       });
       if (Object.keys(normalized).length > 0) {
@@ -1391,12 +1397,7 @@ const fetchMenuForDate = useCallback(
     );
   }, [selectedPlanDetails]);
 
-  const perMealDiscountCap = useMemo(() => {
-    if (!selectedPlanDetails) return null;
-    return isDiscountCappedPlan(selectedPlanDetails.plan)
-      ? PLAN_DISCOUNT_BOX_CAP_PER_MEAL * selectedPlanDetails.quantity
-      : null;
-  }, [selectedPlanDetails]);
+  const perMealDiscountCap = null;
 
   const shouldEnforceIncludedMinimum = useMemo(() => {
     return requiresIncludedBoxMinimum(selectedPlanDetails?.plan);
@@ -1412,20 +1413,7 @@ const fetchMenuForDate = useCallback(
     }, 0);
   }, [selectedMeals]);
 
-  const discountEligibleBoxes = useMemo(() => {
-    if (!selectedPlanDetails) return 0;
-    if (!perMealDiscountCap) return selectedBoxes;
-
-    // Apply the cap per dish per delivery day.
-    let eligible = 0;
-    Object.values(selectedMeals).forEach((menuMap) => {
-      Object.values(menuMap).forEach((entry) => {
-        const qty = entry.quantity || 0;
-        eligible += Math.min(qty, perMealDiscountCap);
-      });
-    });
-    return eligible;
-  }, [perMealDiscountCap, selectedMeals, selectedPlanDetails, selectedBoxes]);
+  const discountEligibleBoxes = selectedBoxes;
 
   const includedShortfall = useMemo(() => {
     if (!shouldEnforceIncludedMinimum) return 0;
@@ -1451,6 +1439,7 @@ const fetchMenuForDate = useCallback(
 
   const extraBoxes = useMemo(() => {
     if (!selectedPlanDetails) return 0;
+    if (selectedPlanDetails.plan.tab !== 'regular') return 0;
     const includedCount = Math.min(discountEligibleBoxes, includedBoxes);
     const extras = selectedBoxes - includedCount;
     return extras > 0 ? extras : 0;
@@ -1769,11 +1758,13 @@ const fetchMenuForDate = useCallback(
       return;
     }
     const existing = selectedMeals[date]?.[itemId];
+    const defaultVariation = menuItem.variations?.find((v) => v.is_available);
     setMealModalState({
       isOpen: true,
       date,
       item: menuItem,
       quantity: existing?.quantity || 1,
+      variationSize: existing?.variationSize || defaultVariation?.size,
       instructions: existing?.instructions || '',
     });
   };
@@ -1784,6 +1775,7 @@ const fetchMenuForDate = useCallback(
       date: null,
       item: null,
       quantity: 1,
+      variationSize: undefined,
       instructions: '',
     });
   };
@@ -1802,6 +1794,13 @@ const fetchMenuForDate = useCallback(
     }));
   };
 
+  const handleMealModalVariationChange = (value: string) => {
+    setMealModalState((prev) => ({
+      ...prev,
+      variationSize: value || undefined,
+    }));
+  };
+
   const handleSaveMealSelection = () => {
     if (!mealModalState.date || !mealModalState.item) {
       return;
@@ -1810,6 +1809,7 @@ const fetchMenuForDate = useCallback(
       mealModalState.date,
       mealModalState.item,
       mealModalState.quantity,
+      mealModalState.variationSize,
       mealModalState.instructions
     );
     if (success) {
@@ -1825,6 +1825,7 @@ const fetchMenuForDate = useCallback(
       mealModalState.date,
       mealModalState.item,
       0,
+      undefined,
       ''
     );
     if (success) {
@@ -1836,6 +1837,7 @@ const fetchMenuForDate = useCallback(
     date: string,
     item: MenuItem,
     desiredQuantity: number,
+    variationSize?: string,
     instructions?: string
   ): boolean => {
     if (isDateLocked(date)) {
@@ -1868,52 +1870,14 @@ const fetchMenuForDate = useCallback(
         ? instructions
         : currentEntry?.instructions || '';
 
-    const rawMaxPerMeal =
-      selectedPlanDetails.plan.max_boxes_per_meal &&
-      selectedPlanDetails.plan.max_boxes_per_meal > 0
-        ? selectedPlanDetails.plan.max_boxes_per_meal *
-          selectedPlanDetails.quantity
-        : null;
-
-    const hardCap =
-      rawMaxPerMeal && !isDiscountCappedPlan(selectedPlanDetails.plan)
-        ? rawMaxPerMeal
-        : null;
-
-    const discountCapPerDish = perMealDiscountCap;
-    const willExceedDiscountCap =
-      discountCapPerDish !== null &&
-      normalizedQuantity > discountCapPerDish &&
-      currentQuantity <= discountCapPerDish;
-
-    if (willExceedDiscountCap) {
-      const toastKey = `${itemId}-${discountCapPerDish}`;
-      const now = Date.now();
-      const lastShown = discountCapToastRef.current[toastKey] || 0;
-      if (now - lastShown > 1500) {
-        discountCapToastRef.current[toastKey] = now;
-        showToast(
-          `Only the first ${discountCapPerDish} box${
-            discountCapPerDish === 1 ? '' : 'es'
-          } of each dish are covered by the plan discount. Extra boxes will be charged separately.`,
-          'info'
-        );
-      }
-    }
-
-    if (hardCap && normalizedQuantity > hardCap) {
-      showToast(
-        `This plan allows up to ${hardCap} boxes per dish.`,
-        'warning'
-      );
-      return false;
-    }
-
     const trimmedInstructions = normalizedInstructions.trim();
+    const normalizedVariation =
+      variationSize || currentEntry?.variationSize || undefined;
     if (
       normalizedQuantity === currentQuantity &&
       (trimmedInstructions || undefined) ===
-        (currentEntry?.instructions?.trim() || undefined)
+        (currentEntry?.instructions?.trim() || undefined) &&
+      normalizedVariation === (currentEntry?.variationSize || undefined)
     ) {
       return true;
     }
@@ -1926,6 +1890,7 @@ const fetchMenuForDate = useCallback(
       } else {
         updatedForDate[itemId] = {
           quantity: normalizedQuantity,
+          variationSize: normalizedVariation,
           instructions: trimmedInstructions || undefined,
         };
       }
@@ -1954,7 +1919,13 @@ const fetchMenuForDate = useCallback(
     const existing = selectedMeals[date]?.[itemId];
     const currentQuantity = existing?.quantity || 0;
     const nextQuantity = Math.max(0, currentQuantity + delta);
-    updateMealSelection(date, item, nextQuantity, existing?.instructions);
+    updateMealSelection(
+      date,
+      item,
+      nextQuantity,
+      existing?.variationSize,
+      existing?.instructions
+    );
   };
 
   const scheduleDatesReady = useMemo(() => {
@@ -2121,6 +2092,7 @@ const fetchMenuForDate = useCallback(
           return {
             item: menu,
             quantity,
+            variation_size: selection.variationSize,
             instructions: selection.instructions,
           };
         })
@@ -2189,6 +2161,7 @@ const fetchMenuForDate = useCallback(
     const deliverySlotsPayload = selectedDates.map((date) => {
       const meals = selectedMeals[date] || {};
       const normalized: Record<string, number> = {};
+      const variationSizes: Record<string, string> = {};
       const slotNotes: string[] = [];
       Object.entries(meals).forEach(([itemId, selection]) => {
         const qty = Math.max(0, Number(selection.quantity) || 0);
@@ -2196,6 +2169,9 @@ const fetchMenuForDate = useCallback(
           return;
         }
         normalized[itemId] = qty;
+        if (selection.variationSize) {
+          variationSizes[itemId] = selection.variationSize;
+        }
         if (selection.instructions) {
           const trimmed = selection.instructions.trim();
           if (trimmed) {
@@ -2213,6 +2189,7 @@ const fetchMenuForDate = useCallback(
       return {
         delivery_date: date,
         menu_items: normalized,
+        variation_sizes: Object.keys(variationSizes).length ? variationSizes : undefined,
         notes: slotNotes.length ? slotNotes.join(' | ') : undefined,
       };
     });
@@ -3418,7 +3395,15 @@ const fetchMenuForDate = useCallback(
     mealModalItemId &&
     mealModalState.date &&
     selectedMeals[mealModalState.date]?.[mealModalItemId];
-  const mealModalPricePerItem = Number(mealModalItem?.price) || 0;
+  const mealModalAvailableVariations =
+    mealModalItem?.variations?.filter((v) => v.is_available) || [];
+  const mealModalSelectedVariation =
+    mealModalAvailableVariations.find(
+      (v) => v.size === mealModalState.variationSize
+    ) || mealModalAvailableVariations[0];
+  const mealModalPricePerItem = Number(
+    mealModalSelectedVariation?.price ?? mealModalItem?.price
+  ) || 0;
   const mealModalTotalPrice = mealModalPricePerItem * mealModalState.quantity;
   const mealModalImageUrl = mealModalItem
     ? resolveMenuImageUrl(mealModalItem)
@@ -3549,6 +3534,31 @@ const fetchMenuForDate = useCallback(
                   </div>
                 )}
             </div>
+
+            {mealModalAvailableVariations.length > 0 && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-text">
+                  Size
+                </label>
+                <select
+                  value={
+                    mealModalState.variationSize ||
+                    mealModalSelectedVariation?.size ||
+                    ''
+                  }
+                  onChange={(e) => handleMealModalVariationChange(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm font-semibold text-primary focus:border-transparent focus:ring-2 focus:ring-primary"
+                >
+                  {mealModalAvailableVariations.map((variation) => (
+                    <option key={variation.size} value={variation.size}>
+                      {variation.size.charAt(0).toUpperCase() +
+                        variation.size.slice(1)}{' '}
+                      - {formatCurrency(Number(variation.price) || 0)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="mb-2 block text-sm font-medium text-text">
@@ -3808,9 +3818,8 @@ const fetchMenuForDate = useCallback(
                   </p>
                   <ul className="list-disc list-inside space-y-1">
                     <li>10 meals included.</li>
-                    <li>Base price: $99.00</li>
-                    <li>Per meal after discount: $9.9</li>
-                    <li>2 boxes per meal per plan.</li>
+                    <li>Deal discount: $20 off</li>
+                    <li>No per-dish quantity cap.</li>
                   </ul>
                 </>
               ) : isModalFortnightPlan ? (
@@ -3820,21 +3829,8 @@ const fetchMenuForDate = useCallback(
                   </p>
                   <ul className="list-disc list-inside space-y-1">
                     <li>20 meals included</li>
-                    <li>
-                      Base price:{' '}
-                      <span className="font-semibold text-text">
-                        {formatCurrency(fortnightOverrides?.basePrice || 0)}
-                      </span>
-                    </li>
-                    <li>
-                      Per meal after discount:{' '}
-                      <span className="font-semibold text-text">
-                        {formatCurrency(fortnightOverrides?.pricePerMeal || 0)}
-                      </span>
-                    </li>
-                    <li>
-                      2 boxes per dish per plan.
-                    </li>
+                    <li>Deal discount: $50 off</li>
+                    <li>No per-dish quantity cap.</li>
                   </ul>
                 </>
               ) : (

@@ -37,6 +37,7 @@ const DeliveryZonesPage: React.FC = () => {
     postcode: '',
     zone_label: '',
     suburbs: '',
+    distance_from_business: '',
     base_delivery_fee: '10',
     express_delivery_fee: '',
     notes: '',
@@ -78,6 +79,11 @@ const DeliveryZonesPage: React.FC = () => {
         postcode: zone.postcode,
         zone_label: zone.zone_label || '',
         suburbs: zone.suburbs.join(', '),
+        distance_from_business:
+          zone.distance_from_business !== null &&
+          zone.distance_from_business !== undefined
+            ? String(zone.distance_from_business)
+            : '',
         base_delivery_fee: String(zone.base_delivery_fee || 10),
         express_delivery_fee: zone.express_delivery_fee
           ? String(zone.express_delivery_fee)
@@ -91,6 +97,7 @@ const DeliveryZonesPage: React.FC = () => {
         postcode: '',
         zone_label: '',
         suburbs: '',
+        distance_from_business: '',
         base_delivery_fee: '10',
         express_delivery_fee: '',
         notes: '',
@@ -119,6 +126,9 @@ const DeliveryZonesPage: React.FC = () => {
       postcode: zoneForm.postcode,
       zone_label: zoneForm.zone_label || undefined,
       suburbs: suburbsArray,
+      distance_from_business: zoneForm.distance_from_business
+        ? Number(zoneForm.distance_from_business)
+        : undefined,
       base_delivery_fee: Number(zoneForm.base_delivery_fee || 10),
       express_delivery_fee: zoneForm.express_delivery_fee
         ? Number(zoneForm.express_delivery_fee)
@@ -243,6 +253,9 @@ const DeliveryZonesPage: React.FC = () => {
                       Base Fee
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Radius (km)
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Express Fee
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -257,7 +270,7 @@ const DeliveryZonesPage: React.FC = () => {
                   {deliveryZones.length === 0 && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="px-4 py-6 text-center text-gray-500 italic"
                       >
                         No delivery zones configured yet.
@@ -277,6 +290,12 @@ const DeliveryZonesPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">
                         {formatCurrency(zone.base_delivery_fee)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">
+                        {zone.distance_from_business !== null &&
+                        zone.distance_from_business !== undefined
+                          ? `${zone.distance_from_business}`
+                          : '—'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">
                         {zone.express_delivery_fee
@@ -372,6 +391,16 @@ const DeliveryZonesPage: React.FC = () => {
                   handleZoneFormChange('base_delivery_fee', e.target.value)
                 }
                 required
+              />
+              <Input
+                label="Radius (km)"
+                type="number"
+                step="0.1"
+                value={zoneForm.distance_from_business}
+                onChange={(e) =>
+                  handleZoneFormChange('distance_from_business', e.target.value)
+                }
+                placeholder="Optional delivery radius for this postcode"
               />
               <Input
                 label="Express Delivery Fee"

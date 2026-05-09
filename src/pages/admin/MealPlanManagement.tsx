@@ -13,9 +13,9 @@ import { MealSubscriptionPlan } from '@models/subscription.types';
 
 const PLAN_TABS_AVAILABLE: MealSubscriptionPlan['tab'][] = [
   'weekly',
-  'fortnight',
-  'monthly',
-  'regular',
+  // 'fortnight',
+  // 'monthly',
+  // 'regular',
 ];
 
 type PlanFormState = Partial<MealSubscriptionPlan> & {

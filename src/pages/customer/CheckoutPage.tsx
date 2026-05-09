@@ -173,107 +173,65 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
     const plan = subscriptionDetails.plan;
     const isRegularPlan = plan?.tab === 'regular';
 
-    const planPrice = Number(plan?.price_per_plan) || 0;
-    const planQuantity = subscriptionDetails.planQuantity || 1;
-    const includedBoxesCount = Math.max(0, toNumber(subscriptionDetails.includedBoxes));
-    const perMealDiscountCap = DISCOUNT_CAPPED_PLAN_TABS.includes(plan?.tab || '')
-      ? PLAN_DISCOUNT_BOX_CAP_PER_MEAL * planQuantity
-      : null;
+    const resolveEntryPrice = (entry: any) => {
+      const base = toNumber(entry.item?.price ?? entry.price);
+      const size = (entry as any)?.variation_size;
+      if (!size) return base;
+      const variations = entry.item?.variations || [];
+      const match = Array.isArray(variations)
+        ? variations.find(
+            (v: any) =>
+              v?.is_available &&
+              String(v?.size || '').toLowerCase() === String(size).toLowerCase()
+          )
+        : null;
+      return toNumber(match?.price ?? base);
+    };
 
-    const flatItemPrices: number[] = [];
-    const eligiblePrices: number[] = [];
-    const alwaysExtraPrices: number[] = [];
+    let itemsSubtotal = 0;
     let totalBoxesFromSchedule = 0;
-
     (subscriptionDetails.schedule || []).forEach((slot) => {
       const slotItems = Array.isArray(slot.items) ? slot.items : [];
       slotItems.forEach((entry) => {
-        const price = toNumber(entry.item?.price ?? (entry as any)?.price);
+        const price = resolveEntryPrice(entry);
         const quantity = Math.max(0, toNumber(entry.quantity));
         if (!quantity) return;
-
         totalBoxesFromSchedule += quantity;
-
-        for (let i = 0; i < quantity; i++) {
-          flatItemPrices.push(price);
-        }
-
-        if (isRegularPlan) return;
-
-        const eligibleForPlan = perMealDiscountCap
-          ? Math.min(quantity, perMealDiscountCap)
-          : quantity;
-        const ineligibleForPlan = quantity - eligibleForPlan;
-
-        for (let i = 0; i < eligibleForPlan; i++) {
-          eligiblePrices.push(price);
-        }
-        for (let i = 0; i < ineligibleForPlan; i++) {
-          alwaysExtraPrices.push(price);
-        }
+        itemsSubtotal += price * quantity;
       });
     });
 
-    // Regular plan: everything is pay-per-meal, no included boxes concept.
+    const baseSubtotal = itemsSubtotal + sidelineTotal + addOnTotal;
+
     if (isRegularPlan) {
-      const planSubtotal = flatItemPrices.reduce((sum, price) => sum + price, 0);
-      const subtotalBeforeDelivery = planSubtotal + sidelineTotal + addOnTotal;
       return {
-        planSubtotal,
+        planSubtotal: itemsSubtotal,
+        discount: 0,
         extraBoxesCost: 0,
         extraBoxUnit: 0,
-        subtotalBeforeDelivery,
-        tax: subtotalBeforeDelivery * 0.1,
+        subtotalBeforeDelivery: baseSubtotal,
+        tax: baseSubtotal * 0.1,
         extraBoxesCount: 0,
       };
     }
 
-    const totalEligible = eligiblePrices.length;
-    const coveredEligible = Math.min(totalEligible, includedBoxesCount);
-    const overflowEligiblePrices = eligiblePrices.slice(coveredEligible);
+    const discount =
+      plan?.tab === 'weekly' && totalBoxesFromSchedule > 0
+        ? 20
+        : plan?.tab === 'fortnight' && totalBoxesFromSchedule >= 20
+          ? 50
+          : 0;
 
-    // Extras are: (a) anything beyond the per-dish cap + (b) any eligible boxes beyond included count.
-    const computedExtraPrices = [...alwaysExtraPrices, ...overflowEligiblePrices];
-    const computedExtraBoxes = computedExtraPrices.length;
-    let extraBoxesCost = computedExtraPrices.reduce((sum, price) => sum + price, 0);
-
-    const declaredExtraBoxes = Math.max(0, toNumber(subscriptionDetails.extraBoxes));
-    const totalBoxes = Math.max(
-      totalBoxesFromSchedule,
-      toNumber(subscriptionDetails.totalBoxes) || 0
-    );
-    const minExtraFromTotals = Math.max(0, totalBoxes - includedBoxesCount);
-    const effectiveExtraBoxes = Math.max(
-      computedExtraBoxes,
-      declaredExtraBoxes,
-      minExtraFromTotals
-    );
-
-    // Fallback pricing if extras were inferred from totals but not captured above.
-    if (effectiveExtraBoxes > computedExtraBoxes) {
-      const overflowFromIncluded = flatItemPrices.slice(includedBoxesCount);
-      const fallbackCost = overflowFromIncluded
-        .slice(Math.max(0, overflowFromIncluded.length - effectiveExtraBoxes))
-        .reduce((sum, price) => sum + price, 0);
-      extraBoxesCost = Math.max(extraBoxesCost, fallbackCost);
-    }
-
-    const planSubtotal = planPrice * planQuantity;
-    const extraBoxesCount = effectiveExtraBoxes;
-
-    const extraBoxUnit =
-      extraBoxesCount > 0 ? extraBoxesCost / extraBoxesCount : 0;
-
-    const subtotalBeforeDelivery =
-      planSubtotal + extraBoxesCost + sidelineTotal + addOnTotal;
+    const discountedSubtotal = Math.max(0, baseSubtotal - discount);
 
     return {
-      planSubtotal,
-      extraBoxesCost,
-      extraBoxUnit,
-      subtotalBeforeDelivery,
-      tax: subtotalBeforeDelivery * 0.1,
-      extraBoxesCount,
+      planSubtotal: itemsSubtotal,
+      discount,
+      extraBoxesCost: 0,
+      extraBoxUnit: 0,
+      subtotalBeforeDelivery: discountedSubtotal,
+      tax: discountedSubtotal * 0.1,
+      extraBoxesCount: 0,
     };
   }, [subscriptionDetails, sidelineTotal, addOnTotal]);
 
@@ -338,7 +296,16 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
 
   useEffect(() => {
     if (subscriptionDetails) {
-      setDeliveryMethod(subscriptionDetails.fulfilment);
+      const dates = Array.isArray(subscriptionDetails.schedule)
+        ? subscriptionDetails.schedule.map((slot: any) => slot.date).filter(Boolean)
+        : [];
+      const defaultMethod =
+        subscriptionDetails.fulfilment === 'pickup' ? 'pickup' : 'delivery';
+      const mapping: Record<string, 'delivery' | 'pickup'> = {};
+      dates.forEach((date: string) => {
+        mapping[date] = defaultMethod;
+      });
+      setSubscriptionFulfilmentByDate(mapping);
     }
   }, [subscriptionDetails]);
 
@@ -347,6 +314,8 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
   // State
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
+  const [subscriptionFulfilmentByDate, setSubscriptionFulfilmentByDate] =
+    useState<Record<string, 'delivery' | 'pickup'>>({});
   const [deliveryMethod, setDeliveryMethod] = useState<'delivery' | 'pickup'>(
     'delivery'
   );
@@ -370,6 +339,25 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
   const [cardNumberComplete, setCardNumberComplete] = useState(false);
   const [cardExpiryComplete, setCardExpiryComplete] = useState(false);
   const [cardCvcComplete, setCardCvcComplete] = useState(false);
+
+  const subscriptionDeliveryDays = useMemo(() => {
+    if (!subscriptionDetails?.schedule?.length) {
+      return 0;
+    }
+    return subscriptionDetails.schedule.reduce((count: number, slot: any) => {
+      const date = slot?.date;
+      if (!date) return count;
+      const chosen =
+        subscriptionFulfilmentByDate[date] ||
+        (subscriptionDetails.fulfilment === 'pickup' ? 'pickup' : 'delivery');
+      return count + (chosen === 'delivery' ? 1 : 0);
+    }, 0);
+  }, [subscriptionDetails, subscriptionFulfilmentByDate]);
+
+  useEffect(() => {
+    if (!subscriptionDetails) return;
+    setDeliveryMethod(subscriptionDeliveryDays > 0 ? 'delivery' : 'pickup');
+  }, [subscriptionDetails, subscriptionDeliveryDays]);
 
   useEffect(() => {
     if (!isStripeAvailable) {
@@ -534,31 +522,23 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
 
       try {
         const deliveryDays =
-          subscriptionDetails?.schedule?.length ||
+          subscriptionDeliveryDays ||
           subscriptionDetails?.plan?.deliveries_per_cycle ||
           1;
         const orderValue =
           subscriptionPricing?.subtotalBeforeDelivery ??
           summary.subtotal ??
           0;
-        const zoneFeePerDay = matchedZone.base_delivery_fee ?? 0;
-        if (zoneFeePerDay <= 0) {
-          throw new Error('Delivery fee is not configured for this postcode.');
+        const response = await calculateDeliveryFee(selectedAddressId, {
+          deliveryDays,
+          orderValue,
+          isExpress: false,
+        });
+        const fee = Number((response as any)?.fee);
+        if (!Number.isFinite(fee) || fee < 0) {
+          throw new Error('Delivery fee could not be calculated for this postcode.');
         }
-        const zoneTotal = zoneFeePerDay * Math.max(1, deliveryDays);
-
-        // Call backend for validation/distance; override displayed fee with admin zone fee.
-        try {
-          await calculateDeliveryFee(selectedAddressId, {
-            deliveryDays,
-            orderValue,
-            isExpress: false,
-          });
-        } catch (e) {
-          console.warn('Delivery fee calculation fallback, using zone fee:', e);
-        }
-
-        setDeliveryFee(zoneTotal);
+        setDeliveryFee(fee);
       } catch (error: any) {
         console.error('Delivery fee calculation failed:', error);
         const message =
@@ -580,6 +560,7 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
     subscriptionPricing,
     clearAddressError,
     subscriptionDetails,
+    subscriptionDeliveryDays,
     cateringDetails,
   ]);
 
@@ -638,7 +619,7 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
         const itemData = getItemData(entry);
         const itemId =
           itemData.id ||
-          entry.item_id ||
+          (entry as any).item_id ||
           entry.id ||
           entry._id ||
           entry.menu_item?.id ||
@@ -860,7 +841,7 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
             .map((entry) => {
               const id =
                 entry.id ||
-                entry.item_id ||
+                (entry as any).item_id ||
                 entry.item?._id ||
                 entry.item?.id;
               const qty = Number(entry.quantity) || 0;
@@ -895,19 +876,19 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
 
         const deliverySlots = subscriptionDetails.schedule
           .map((slot) => {
-            const menuItems = slot.items.reduce(
-              (acc: Record<string, number>, entry) => {
-                const rawId =
-                  (entry.item as any)?._id || (entry.item as any)?.id;
-                const quantity = Number(entry.quantity) || 0;
-                if (!rawId || quantity <= 0) {
-                  return acc;
-                }
-                acc[rawId] = (acc[rawId] || 0) + quantity;
-                return acc;
-              },
-              {} as Record<string, number>,
-            );
+            const menuItems: Record<string, number> = {};
+            const variationSizes: Record<string, string> = {};
+            slot.items.forEach((entry: any) => {
+              const rawId = (entry.item as any)?._id || (entry.item as any)?.id;
+              const quantity = Number(entry.quantity) || 0;
+              if (!rawId || quantity <= 0) {
+                return;
+              }
+              menuItems[rawId] = (menuItems[rawId] || 0) + quantity;
+              if (entry.variation_size) {
+                variationSizes[rawId] = String(entry.variation_size);
+              }
+            });
 
             const normalizedNotes = (() => {
               const existing = slot.notes?.trim();
@@ -925,6 +906,14 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
             return {
               delivery_date: slot.date,
               menu_items: menuItems,
+              variation_sizes: Object.keys(variationSizes).length
+                ? variationSizes
+                : undefined,
+              fulfilment_method:
+                subscriptionFulfilmentByDate[slot.date] ||
+                (subscriptionDetails.fulfilment === 'pickup'
+                  ? 'pickup'
+                  : 'delivery'),
               notes: normalizedNotes,
             };
           })
@@ -1102,60 +1091,66 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
                   <span>Delivery Method</span>
                 </h2>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setDeliveryMethod('delivery')}
-                    className={`p-4 border-2 rounded-lg transition-all ${deliveryMethod === 'delivery'
-                      ? 'border-primary bg-primary-50'
-                      : 'border-gray-200 hover:border-primary'
-                      }`}
-                  >
-                    <MapPin
-                      className={`mx-auto mb-2 ${deliveryMethod === 'delivery'
-                        ? 'text-primary'
-                        : 'text-gray-400'
+                {subscriptionDetails ? (
+                  <p className="text-sm text-gray-600">
+                    Choose delivery or pickup per day in the meal subscription summary. Delivery fees are calculated only for the days marked as delivery.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryMethod('delivery')}
+                      className={`p-4 border-2 rounded-lg transition-all ${deliveryMethod === 'delivery'
+                        ? 'border-primary bg-primary-50'
+                        : 'border-gray-200 hover:border-primary'
                         }`}
-                      size={32}
-                    />
-                    <p className="font-semibold text-text">Delivery</p>
-                    <p className="text-sm text-gray-600">
-                      {deliveryMethod === 'delivery' ? (
-                        isCalculatingDeliveryFee ? (
-                          'Calculating...'
-                        ) : effectiveDeliveryFee === 0 ? (
-                          'FREE'
+                    >
+                      <MapPin
+                        className={`mx-auto mb-2 ${deliveryMethod === 'delivery'
+                          ? 'text-primary'
+                          : 'text-gray-400'
+                          }`}
+                        size={32}
+                      />
+                      <p className="font-semibold text-text">Delivery</p>
+                      <p className="text-sm text-gray-600">
+                        {deliveryMethod === 'delivery' ? (
+                          isCalculatingDeliveryFee ? (
+                            'Calculating...'
+                          ) : effectiveDeliveryFee === 0 ? (
+                            'FREE'
+                          ) : (
+                            formatCurrency(effectiveDeliveryFee)
+                          )
                         ) : (
                           formatCurrency(effectiveDeliveryFee)
-                        )
-                      ) : (
-                        formatCurrency(effectiveDeliveryFee)
-                      )}
-                    </p>
-                  </button>
+                        )}
+                      </p>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeliveryMethod('pickup');
-                      setIsAddressModalOpen(false);
-                    }}
-                    className={`p-4 border-2 rounded-lg transition-all ${deliveryMethod === 'pickup'
-                      ? 'border-primary bg-primary-50'
-                      : 'border-gray-200 hover:border-primary'
-                      }`}
-                  >
-                    <Store
-                      className={`mx-auto mb-2 ${deliveryMethod === 'pickup'
-                        ? 'text-primary'
-                        : 'text-gray-400'
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeliveryMethod('pickup');
+                        setIsAddressModalOpen(false);
+                      }}
+                      className={`p-4 border-2 rounded-lg transition-all ${deliveryMethod === 'pickup'
+                        ? 'border-primary bg-primary-50'
+                        : 'border-gray-200 hover:border-primary'
                         }`}
-                      size={32}
-                    />
-                    <p className="font-semibold text-text">Pickup</p>
-                    <p className="text-sm text-gray-600">FREE</p>
-                  </button>
-                </div>
+                    >
+                      <Store
+                        className={`mx-auto mb-2 ${deliveryMethod === 'pickup'
+                          ? 'text-primary'
+                          : 'text-gray-400'
+                          }`}
+                        size={32}
+                      />
+                      <p className="font-semibold text-text">Pickup</p>
+                      <p className="text-sm text-gray-600">FREE</p>
+                    </button>
+                  </div>
+                )}
               </Card>
 
               {/* Delivery Address - only show if delivery selected */}
@@ -1473,11 +1468,15 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
                         </p>
                         <p className="text-xs text-gray-500">
                           Qty {subscriptionDetails.planQuantity} ·{' '}
-                          {deliveryMethod === 'delivery' ? 'Delivery' : 'Pickup'}
+                          {subscriptionDeliveryDays > 0
+                            ? subscriptionDeliveryDays ===
+                              subscriptionScheduleSummary.length
+                              ? 'Delivery'
+                              : 'Delivery + Pickup'
+                            : 'Pickup'}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {subscriptionDetails.includedBoxes} boxes included ·{' '}
-                          {subscriptionDetails.totalBoxes} selected
+                          {subscriptionDetails.totalBoxes} meals selected
                         </p>
                       </div>
                       <span className="font-semibold">
@@ -1485,21 +1484,14 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
                       </span>
                     </div>
 
-                    {subscriptionPricing?.extraBoxesCost &&
-                      subscriptionPricing.extraBoxesCost > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">
-                            Extra boxes (
-                            {subscriptionPricing?.extraBoxesCount ??
-                              subscriptionDetails.extraBoxes ??
-                              0}
-                            )
-                          </span>
-                          <span className="font-semibold">
-                            {formatCurrency(subscriptionPricing.extraBoxesCost)}
-                          </span>
-                        </div>
-                      )}
+                    {Number((subscriptionPricing as any)?.discount) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Deal discount</span>
+                        <span className="font-semibold text-green-600">
+                          - {formatCurrency(Number((subscriptionPricing as any)?.discount) || 0)}
+                        </span>
+                      </div>
+                    )}
 
                     {subscriptionScheduleSummary.length > 0 && (
                       <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs text-gray-600 space-y-2">
@@ -1508,9 +1500,35 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
                             key={slot.date}
                             className="flex items-center justify-between"
                           >
-                            <span>{slot.displayDate}</span>
+                            <div className="flex flex-col">
+                              <span>{slot.displayDate}</span>
+                              <label className="mt-1 inline-flex items-center gap-2 text-[11px] text-gray-500">
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    (subscriptionFulfilmentByDate[slot.date] ||
+                                      (subscriptionDetails.fulfilment === 'pickup'
+                                        ? 'pickup'
+                                        : 'delivery')) === 'delivery'
+                                  }
+                                  onChange={() =>
+                                    setSubscriptionFulfilmentByDate((prev) => ({
+                                      ...prev,
+                                      [slot.date]:
+                                        (prev[slot.date] ||
+                                          (subscriptionDetails.fulfilment === 'pickup'
+                                            ? 'pickup'
+                                            : 'delivery')) === 'delivery'
+                                          ? 'pickup'
+                                          : 'delivery',
+                                    }))
+                                  }
+                                />
+                                Delivery for this day
+                              </label>
+                            </div>
                             <span className="font-semibold text-text">
-                              {slot.totalBoxes} boxes
+                              {slot.totalBoxes} meals
                             </span>
                           </div>
                         ))}
