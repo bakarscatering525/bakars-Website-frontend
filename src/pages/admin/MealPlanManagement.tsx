@@ -15,7 +15,7 @@ const PLAN_TABS_AVAILABLE: MealSubscriptionPlan['tab'][] = [
   'weekly',
   // 'fortnight',
   // 'monthly',
-  // 'regular',
+  'regular',
 ];
 
 type PlanFormState = Partial<MealSubscriptionPlan> & {

@@ -112,8 +112,8 @@ const DEFAULT_DELIVERY_DAYS = ['monday', 'thursday'];
 
 const PLAN_TAB_ORDER: MealSubscriptionPlan['tab'][] = [
   'weekly',
-  'fortnight',
   'regular',
+  'fortnight',
   'custom',
 ];
 
