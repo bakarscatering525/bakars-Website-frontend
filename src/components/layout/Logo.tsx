@@ -17,31 +17,17 @@ const Logo: React.FC<LogoProps> = ({
     lg: 'h-20 sm:h-24', // increased from 15->20 and 16->24
   };
 
-  const textSize = {
-    sm: 'text-sm sm:text-base',
-    md: 'text-base sm:text-lg',
-    lg: 'text-lg sm:text-xl',
-  };
-
   // Keep variant prop for compatibility in case future themed logos are added
   const opacityClass = variant === 'white' ? 'opacity-95' : 'opacity-100';
-  const colorClass = variant === 'white' ? 'text-white' : 'text-primary';
-  const textVisibility = hideTextOnMobile ? 'hidden sm:inline-block' : '';
+  void hideTextOnMobile;
 
   return (
-    <div
-      className={`flex items-center gap-0 font-heading font-bold leading-tight -ml-2 sm:-ml-3 ${colorClass}`}
-    >
+    <div className="flex items-center">
       <img
-        src="/images/placeholders/logo2.png"
+        src="/images/placeholders/logo4.png"
         alt="Bakar's Food & Catering logo"
         className={`w-auto object-contain ${logoHeight[size]} ${opacityClass}`}
       />
-      <span
-        className={`${textSize[size]} whitespace-nowrap -ml-0.5 sm:-ml-1 ${textVisibility}`}
-      >
-        Bakar's Food &amp; Catering
-      </span>
     </div>
   );
 };

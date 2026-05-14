@@ -175,18 +175,17 @@ const OrderManagement: React.FC = () => {
     }
 
     try {
-      const response = await fetch('/logo.svg');
+      const response = await fetch('/images/placeholders/logo4.png');
       if (!response.ok) {
         return null;
       }
-      const svgText = await response.text();
-      const encodedSvg = window
-        .btoa(
-          encodeURIComponent(svgText).replace(/%([0-9A-F]{2})/g, (_match, p1) =>
-            String.fromCharCode(Number.parseInt(p1, 16))
-          )
-        );
-      const imageSrc = `data:image/svg+xml;base64,${encodedSvg}`;
+      const blob = await response.blob();
+      const imageSrc = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Failed to read logo blob'));
+        reader.readAsDataURL(blob);
+      });
 
       const image = await new Promise<HTMLImageElement>((resolve, reject) => {
         const img = new Image();
@@ -519,7 +518,7 @@ const OrderManagement: React.FC = () => {
 
           {/* Empty State */}
           {!isLoading && allOrders.length === 0 && (
-            <Card padding="xl" className="text-center">
+            <Card padding="lg" className="text-center">
               <div className="py-12">
                 <div className="text-gray-400 mb-4">
                   <svg

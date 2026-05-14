@@ -58,12 +58,12 @@ const DeliveryZonesPage: React.FC = () => {
     if (!deliveryZonePagination) return;
 
     if (
-      deliveryZonePagination.totalPages > 0 &&
-      zonesPage > deliveryZonePagination.totalPages
+      deliveryZonePagination.total_pages > 0 &&
+      zonesPage > deliveryZonePagination.total_pages
     ) {
-      setZonesPage(deliveryZonePagination.totalPages);
+      setZonesPage(deliveryZonePagination.total_pages);
     }
-  }, [deliveryZonePagination?.totalPages, zonesPage]);
+  }, [deliveryZonePagination?.total_pages, zonesPage]);
 
   useEffect(() => {
     if (error) {
@@ -339,7 +339,7 @@ const DeliveryZonesPage: React.FC = () => {
               <Pagination
                 currentPage={deliveryZonePagination.page || 1}
                 totalItems={deliveryZonePagination.total}
-                pageSize={deliveryZonePagination.pageSize || ZONES_PAGE_SIZE}
+                pageSize={deliveryZonePagination.page_size || ZONES_PAGE_SIZE}
                 onPageChange={setZonesPage}
                 showSummary
                 className="mt-4"

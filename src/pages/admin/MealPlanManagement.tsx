@@ -542,17 +542,17 @@ const MealPlanManagement: React.FC = () => {
     if (!mealPlanPagination) return;
 
     if (
-      mealPlanPagination.totalPages > 0 &&
-      plansPage > mealPlanPagination.totalPages
+      mealPlanPagination.total_pages > 0 &&
+      plansPage > mealPlanPagination.total_pages
     ) {
-      setPlansPage(mealPlanPagination.totalPages);
+      setPlansPage(mealPlanPagination.total_pages);
     } else if (
       mealPlanPagination.page > 0 &&
       mealPlanPagination.page !== plansPage
     ) {
       setPlansPage(mealPlanPagination.page);
     }
-  }, [mealPlanPagination?.page, mealPlanPagination?.totalPages, plansPage]);
+  }, [mealPlanPagination?.page, mealPlanPagination?.total_pages, plansPage]);
 
   useEffect(() => {
     if (error) {
@@ -797,17 +797,17 @@ const weeksWindow = useMemo(() => {
       });
     } else {
       setEditingPlan(null);
-      const targetTab = activePlanTab || defaultPlanForm.tab;
-      setActivePlanTab(targetTab as MealSubscriptionPlan['tab']);
-      const template = PLAN_TAB_CONFIGS[targetTab]?.template ?? {};
+      const resolvedTab = (activePlanTab || defaultPlanForm.tab || 'weekly') as MealSubscriptionPlan['tab'];
+      setActivePlanTab(resolvedTab);
+      const template = PLAN_TAB_CONFIGS[resolvedTab]?.template ?? {};
       const defaultIdentity = buildDefaultPlanIdentity(
-        targetTab as MealSubscriptionPlan['tab']
+        resolvedTab
       );
       const mergedForm: PlanFormState = {
         ...defaultPlanForm,
         ...template,
         ...defaultIdentity,
-        tab: targetTab,
+        tab: resolvedTab,
         customer_notifications: {
           upsell_message: template.customer_notifications?.upsell_message ?? '',
           reminder_message:
@@ -936,7 +936,6 @@ const applyTemplateDays = (days?: string[]) => {
     const {
       suburbs: _suburbs,
       _id: _ignoredPlanId,
-      id: _ignoredClientPlanId,
       created_at: _ignoredCreatedAt,
       updated_at: _ignoredUpdatedAt,
       menu_items_by_day: _ignoredMenuItemsByDay,
@@ -1345,7 +1344,7 @@ const applyTemplateDays = (days?: string[]) => {
               <Pagination
                 currentPage={mealPlanPagination.page || 1}
                 totalItems={mealPlanPagination.total}
-                pageSize={mealPlanPagination.pageSize || MEAL_PLANS_PAGE_SIZE}
+                pageSize={mealPlanPagination.page_size || MEAL_PLANS_PAGE_SIZE}
                 onPageChange={setPlansPage}
                 showSummary
                 className="mt-4"

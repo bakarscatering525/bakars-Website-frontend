@@ -90,6 +90,7 @@ interface AdminStore {
     includeInactive?: boolean;
     page?: number;
     pageSize?: number;
+    search?: string;
   }) => Promise<void>;
   createDeliveryZone: (payload: Partial<DeliveryZone>) => Promise<void>;
   updateDeliveryZone: (zoneId: string, payload: Partial<DeliveryZone>) => Promise<void>;

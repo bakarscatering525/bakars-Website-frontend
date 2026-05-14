@@ -11,10 +11,10 @@ import { loadStripe } from '@stripe/stripe-js';
 import type {
   Stripe,
   StripeElements,
+  StripeElementStyle,
   StripeCardNumberElementOptions,
   StripeCardExpiryElementOptions,
   StripeCardCvcElementOptions,
-  StripeCardElementStyle,
 } from '@stripe/stripe-js';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '@hooks/useCart';
@@ -31,7 +31,6 @@ import { DeliveryZone } from '@models/subscription.types';
 import { DAILY_DELIVERY_FEE } from '@utils/constants';
 import {
   MapPin,
-  Calendar,
   ArrowLeft,
   Truck,
   Store,
@@ -50,8 +49,6 @@ import Modal from '@components/common/Modal';
 
 const DEFAULT_COUNTRY = 'Australia';
 const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY || '';
-const DISCOUNT_CAPPED_PLAN_TABS = ['weekly', 'fortnight', 'monthly'];
-const PLAN_DISCOUNT_BOX_CAP_PER_MEAL = 2;
 
 const formatScheduleDate = (dateString: string) => {
   if (!dateString) {
@@ -254,7 +251,7 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
     });
   }, [subscriptionDetails]);
 
-  const cardElementStyle = useMemo<StripeCardElementStyle>(
+  const cardElementStyle = useMemo<StripeElementStyle>(
     () => ({
       base: {
         fontSize: '16px',
@@ -319,8 +316,6 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
   const [deliveryMethod, setDeliveryMethod] = useState<'delivery' | 'pickup'>(
     'delivery'
   );
-  const [deliveryDate, setDeliveryDate] = useState('');
-  const [deliveryTime, setDeliveryTime] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [paymentMethod, setPaymentMethod] =
     useState<'card' | 'cash'>(initialPaymentMethod);
@@ -570,14 +565,6 @@ const CheckoutPageContent: React.FC<CheckoutPageContentProps> = ({
       navigate('/login', { state: { from: '/checkout' } });
       return;
     }
-
-    // Set minimum delivery date (tomorrow)
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    setDeliveryDate(tomorrow.toISOString().split('T')[0]);
-
-    // Set default time
-    setDeliveryTime('12:00');
   }, [isAuthenticated, navigate]);
 
   // Helper function to safely get item data

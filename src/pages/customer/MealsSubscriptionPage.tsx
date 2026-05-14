@@ -23,7 +23,6 @@ import { formatCurrency } from '@utils/formatters';
 import type { Address } from '@models/address.types';
 import {
   CalendarRange,
-  CheckCircle2,
   ChevronLeft,
   Edit2,
   Info,
@@ -184,12 +183,6 @@ const PLAN_TAB_COPY: Record<
 
 const MIN_MEAL_OPTIONS_PER_DAY = 6;
 const DISCOUNT_CAPPED_PLAN_TABS: MealSubscriptionPlan['tab'][] = [
-  'weekly',
-  'fortnight',
-  'monthly',
-];
-const PLAN_DISCOUNT_BOX_CAP_PER_MEAL = 2;
-const INCLUDED_MIN_PLAN_TABS: MealSubscriptionPlan['tab'][] = [
   'weekly',
   'fortnight',
   'monthly',
@@ -637,17 +630,8 @@ const MealsSubscriptionPage: React.FC = () => {
 
   const [modalPlan, setModalPlan] = useState<MealSubscriptionPlan | null>(null);
   const [modalQuantity, setModalQuantity] = useState<number>(1);
-  const [modalFulfilment, setModalFulfilment] =
-    useState<FulfilmentMethod>('delivery');
-  const fulfilmentLabel = selectedFulfilment
-    ? selectedFulfilment === 'delivery'
-      ? 'Delivery'
-      : 'Pickup'
-    : 'Choose delivery or pickup';
-
   const handleFulfilmentSelect = (method: FulfilmentMethod) => {
     setSelectedFulfilment(method);
-    setModalFulfilment(method);
     setDeliveryValidationError(null);
     setHasConfirmedDelivery(false);
 
@@ -669,7 +653,7 @@ const MealsSubscriptionPage: React.FC = () => {
     try {
       const validation = await validateDeliveryArea(
         selectedAddressId,
-        pendingPlanSelection?.plan?.tab || modalPlan?.tab || 'weekly'
+        'weekly'
       );
       if (validation?.is_valid) {
         setHasConfirmedDelivery(true);
@@ -1148,7 +1132,7 @@ const MealsSubscriptionPage: React.FC = () => {
     const hasWeeklyContext = hasWeeklyPlanSelected || weeklyPlanAcknowledged;
     const hasAnyPlanSelected = Boolean(selectedPlanDetails);
 
-    const shouldShowForCondition = (condition?: string) => {
+    const shouldShowForCondition = (condition?: string | null) => {
       const normalized = condition ?? 'always';
       switch (normalized) {
         case 'hidden':
@@ -1327,7 +1311,9 @@ const fetchMenuForDate = useCallback(
       return;
     }
 
-    const plan = plans.find((p) => (p._id || p.id) === planId);
+    const plan = plans.find(
+      (p) => (p as any)._id === planId || (p as any).id === planId
+    );
 
     if (!plan) {
       showToast('The original meal plan is no longer available.', 'error');
@@ -1479,7 +1465,6 @@ const fetchMenuForDate = useCallback(
   const handleOpenPlanModal = (plan: MealSubscriptionPlan) => {
     setModalPlan(plan);
     setModalQuantity(1);
-    setModalFulfilment('delivery');
     setTermsAccepted(!plan.require_terms_ack);
   };
 
@@ -2257,6 +2242,7 @@ const fetchMenuForDate = useCallback(
       };
     });
     const isRegularPlan = plan.tab === 'regular';
+    const isWeeklyTenPlan = plan.tab === 'weekly';
     const dayLabelString =
       planDays.length > 0
         ? planDays
@@ -2306,7 +2292,9 @@ const fetchMenuForDate = useCallback(
             <p className="text-sm text-gray-500">
               {isRegularPlan
                 ? 'Flexible ordering without the 10-meal commitment.'
-                : plan.description ||
+                : isWeeklyTenPlan
+                  ? 'Choose any 10 meals from our Monday & Thursday menus and enjoy $20 off your total order. No dish cap — pick as many of your favourites as you like.'
+                  : plan.description ||
                   (dayLabelString
                     ? `Choose from configured delivery days: ${dayLabelString}.`
                     : 'Choose your delivery days.')}
@@ -2341,24 +2329,15 @@ const fetchMenuForDate = useCallback(
               </p>
               <p>
                 Delivery{' '}
-                {resolveDeliveriesPerCycle(plan) === 1 ? 'day' : 'days'}
-                {resolveDeliveriesPerCycle(plan)
-                  ? ` (${resolveDeliveriesPerCycle(plan) === 1 ? '1 day' : '1–2 days'} per week)`
+                {deliveries === 1 ? 'day' : 'days'}
+                {deliveries
+                  ? dayLabelString
+                    ? ` (${dayLabelString})`
+                    : ` (${deliveries === 1 ? '1 day' : '1–2 days'} per week)`
                   : ''}
               </p>
             </div>
           </div>
-          {!isRegularPlan && (
-            <div className="flex items-center space-x-3">
-              <Package className="text-primary" size={18} />
-              <div>
-                <p className="font-semibold text-text">
-                  {formatCurrency(plan.price_per_plan || 0)}
-                </p>
-                <p>Total plan price</p>
-              </div>
-            </div>
-          )}
           {planDays.length > 0 && (
             <div className="flex items-center space-x-3 sm:col-span-2">
               <Truck className="text-primary" size={18} />
@@ -2381,17 +2360,6 @@ const fetchMenuForDate = useCallback(
               </div>
             </div>
           )}
-          {!isRegularPlan && plan.price_per_box ? (
-            <div className="flex items-center space-x-3">
-              <CheckCircle2 className="text-primary" size={18} />
-              <div>
-                <p className="font-semibold text-text">
-                  {formatCurrency(plan.price_per_box)}
-                </p>
-                <p>Per meal after discount</p>
-              </div>
-            </div>
-          ) : null}
           {isRegularPlan &&
             regularHighlights.map(({ icon: Icon, title, description }) => (
               <div key={title} className="flex items-start space-x-3">
@@ -3075,14 +3043,21 @@ const fetchMenuForDate = useCallback(
               Confirm your schedule, selected meals, and plan details.
             </p>
           </div>
-          <div className="text-center sm:text-right bg-primary/10 px-4 py-3 rounded-lg text-primary font-semibold">
-            <div className="text-xs uppercase tracking-wide text-primary/80">
-              Plan price
+          {plan.tab === 'weekly' ? (
+            <div className="text-center sm:text-right bg-primary/10 px-4 py-3 rounded-lg text-primary font-semibold">
+              Your $20 discount will be automatically applied at checkout based
+              on your selected meals.
             </div>
-            <div className="text-2xl sm:text-3xl font-heading font-bold">
-              {formatCurrency(plan.price_per_plan || 0)}
+          ) : (
+            <div className="text-center sm:text-right bg-primary/10 px-4 py-3 rounded-lg text-primary font-semibold">
+              <div className="text-xs uppercase tracking-wide text-primary/80">
+                Plan price
+              </div>
+              <div className="text-2xl sm:text-3xl font-heading font-bold">
+                {formatCurrency(plan.price_per_plan || 0)}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <Card className="border border-gray-100">
@@ -3814,12 +3789,15 @@ const fetchMenuForDate = useCallback(
               {isModalWeeklyTenPlan ? (
                 <>
                   <p>
-                    You can select your desired dishes from both Weekly Menus (Monday and Thursday) or just one of the menu to create your perfect 10-meal bundle.
+                    You can select your desired dishes from both Weekly Menus (Monday and Thursday) or just one menu to create your perfect 10-meal bundle. No dish selection cap — order as many of any dish as you like within your bundle.
                   </p>
                   <ul className="list-disc list-inside space-y-1">
                     <li>10 meals included.</li>
                     <li>Deal discount: $20 off</li>
-                    <li>No per-dish quantity cap.</li>
+                    <li>
+                      No dish selection cap — order as many of any dish as you
+                      like within your bundle.
+                    </li>
                   </ul>
                 </>
               ) : isModalFortnightPlan ? (
@@ -3904,19 +3882,19 @@ const fetchMenuForDate = useCallback(
                     One or two weekly deliveries (Monday & Thursday), according to your chosen menu days.
                   </li>
                   <li>
-                    Maximum of 2 boxes per meal per 10-meal plan.
+                    No dish selection cap — you can select multiple quantities of any dish within your 10-meal bundle. Mix and match freely!
                   </li>
                   <li>
-                    If you want more than One Weekly 10 meal plan, then you can unlock more boxes per meal.
+                    The $20 discount applies to your 10-meal bundle only. Any meals ordered beyond 10 are charged at regular menu prices and are not covered by this discount.
+                  </li>
+                  <li>
+                    Ordering more than 10 meals does not qualify for an additional Weekly 10-Meal Plan discount unless a separate eligible plan is purchased.
                   </li>
                   <li>
                     Please contact us at least one day prior to any queries or changes related to your order.
                   </li>
                   <li>
-                    If any customer wants to order more than 2 boxes per meal, then onward boxes will be calculated on Regular prices.
-                  </li>
-                  <li>
-                    If any customer wants to change their delivery address, then They can update their address through email to our customer Support or They can contact via WhatsApp.
+                    If any customer wants to change their delivery address, they can update it via email to our Customer Support or contact us on WhatsApp.
                   </li>
                 </ul>
               </div>
