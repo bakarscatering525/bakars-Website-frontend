@@ -2440,6 +2440,7 @@ const fetchMenuForDate = useCallback(
     if (!selectedPlanDetails) return null;
 
     const plan = selectedPlanDetails.plan;
+    const isWeeklyTenPlan = plan.tab === 'weekly';
     const weekRules = plan.week_selection_rules;
     const reminderSettings = plan.reminder_settings;
     const reminderEnabled = reminderSettings?.enabled;
@@ -2465,9 +2466,16 @@ const fetchMenuForDate = useCallback(
               <span className="font-semibold text-text">{includedBoxes}</span>
             </p>
           </div>
-          <div className="bg-primary/10 px-5 py-3 rounded-lg text-primary font-semibold">
-            {formatCurrency(plan.price_per_plan || 0)} per cycle
-          </div>
+          {isWeeklyTenPlan ? (
+            <div className="bg-primary/10 px-5 py-3 rounded-lg text-primary font-semibold w-full sm:w-auto text-center sm:text-right">
+              Your $20 discount will be automatically applied at checkout based
+              on your selected meals.
+            </div>
+          ) : (
+            <div className="bg-primary/10 px-5 py-3 rounded-lg text-primary font-semibold">
+              {formatCurrency(plan.price_per_plan || 0)} per cycle
+            </div>
+          )}
         </div>
 
         {weekRules && (
@@ -2653,6 +2661,7 @@ const fetchMenuForDate = useCallback(
     }
 
     const plan = selectedPlanDetails.plan;
+    const isWeeklyTenPlan = plan.tab === 'weekly';
     const underfilledDates = getUnderfilledDates();
     const formattedUnderfilled = underfilledDates
       .slice(0, 3)
@@ -2714,9 +2723,16 @@ const fetchMenuForDate = useCallback(
               <span className="font-semibold text-text">{includedBoxes}</span>
             </p>
           </div>
-          <div className="bg-primary/10 px-5 py-3 rounded-lg text-primary font-semibold w-full sm:w-auto text-center sm:text-right">
-            {formatCurrency(plan.price_per_plan || 0)} per cycle
-          </div>
+          {isWeeklyTenPlan ? (
+            <div className="bg-primary/10 px-5 py-3 rounded-lg text-primary font-semibold w-full sm:w-auto text-center sm:text-right">
+              Your $20 discount will be automatically applied at checkout based
+              on your selected meals.
+            </div>
+          ) : (
+            <div className="bg-primary/10 px-5 py-3 rounded-lg text-primary font-semibold w-full sm:w-auto text-center sm:text-right">
+              {formatCurrency(plan.price_per_plan || 0)} per cycle
+            </div>
+          )}
         </div>
 
         {plan.customer_notifications?.reminder_message && (
